@@ -268,7 +268,7 @@ void calculateAngles() {
     angular_motions[PITCH] = 0.7 * angular_motions[PITCH] + 0.3 * gyro_raw[Y] / SSF_GYRO;
     angular_motions[YAW] = 0.7 * angular_motions[YAW] + 0.3 * gyro_raw[Z] / SSF_GYRO;
 
-    
+    /*
     Serial.print("Angle_X:");
     Serial.print(acc_angle[X]);
     Serial.print(",");
@@ -277,7 +277,7 @@ void calculateAngles() {
     Serial.print(",");
     Serial.print("Angle_Z:");
     Serial.print(acc_angle[Z]);
-    Serial.print("\n");
+    Serial.print("\n");*/
 }
 
 /**
@@ -587,10 +587,74 @@ void resetPidController() {
 /**
  * Calculate PID set points on axis YAW, PITCH, ROLL
  */
-void calculateSetPoints() {
-    pid_set_points[YAW] = 10;//calculateYawSetPoint(pulse_length[mode_mapping[YAW]], pulse_length[mode_mapping[THROTTLE]]);
+const unsigned int MAX_MESSAGE_LENGTH = 12;
+int throt = 0;
+int yaw = 0;
+int pitch = 0;
+int roll = 0;
+char message[MAX_MESSAGE_LENGTH];
+int message_pos = 0;
+void calculateSetPoints() 
+{ 
+  while (Serial.available() > 0)
+  {
+    Serial.print("Recived_Message\n");
+   //Create a place to hold the incoming message
+
+   //Read the next available byte in the serial receive buffer
+   char inByte = Serial.read();
+
+   //Message coming in (check not terminating character) and guard for over message size
+   if ( inByte != '\n' && (message_pos < MAX_MESSAGE_LENGTH - 1) )
+   {
+     //Add the incoming byte to our message
+     message[message_pos] = inByte;
+     Serial.println(inByte);
+     Serial.println(message_pos);
+     if (inByte != '0')
+     {
+      switch(message_pos)
+      {
+        case 0:
+        throt = ((int)inByte) - 'a';
+        break;
+        case 1:
+        yaw = ((int)inByte) - 'a';
+        break;
+        case 2:
+        pitch = ((int)inByte) - 'a';
+        break;
+        case 3:
+        roll = ((int)inByte) - 'a';
+        break;
+        default:
+        break;
+      }
+     }
+     message_pos++;
+   }
+   //Full message received...
+   else
+   {
+     //Add null character to string
+     message[message_pos] = '\0';
+
+     //Print the message (or do other things)
+     Serial.println(message);
+
+     //Reset for the next message
+     message_pos = 0;
+   }
+  }
+  message[0] = '\0';
+/* 
+    pid_set_points[YAW] = calculateYawSetPoint(pulse_length[mode_mapping[YAW]], pulse_length[mode_mapping[THROTTLE]]);
     pid_set_points[PITCH] = calculateSetPoint(measures[PITCH], pulse_length[mode_mapping[PITCH]]);
     pid_set_points[ROLL] = calculateSetPoint(measures[ROLL], pulse_length[mode_mapping[ROLL]]);
+*/
+    pid_set_points[YAW] = yaw;//calculateYawSetPoint(yaw, throt);
+    pid_set_points[PITCH] = pitch;//calculateSetPoint(measures[PITCH], pitch);
+    pid_set_points[ROLL] = roll;//calculateSetPoint(measures[ROLL], roll);
 }
 
 /**
