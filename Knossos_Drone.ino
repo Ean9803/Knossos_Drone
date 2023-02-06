@@ -115,6 +115,7 @@ int battery_voltage;
  * Setup configuration
  */
 void setup() {
+    Serial.begin(115200);
     // Start I2C communication
     Wire.begin();
     TWBR = 12; // Set the I2C clock speed to 400kHz.
@@ -224,6 +225,17 @@ void readSensor() {
     gyro_raw[X] = Wire.read() << 8 | Wire.read(); // Add the low and high byte to the gyro_raw[X] variable
     gyro_raw[Y] = Wire.read() << 8 | Wire.read(); // Add the low and high byte to the gyro_raw[Y] variable
     gyro_raw[Z] = Wire.read() << 8 | Wire.read(); // Add the low and high byte to the gyro_raw[Z] variable
+/*
+    Serial.print("acceleration: ");
+    Serial.print(acc_raw[X]);
+    Serial.print(" : ");
+    Serial.print(acc_raw[Y]);
+    Serial.print(" : ");
+    Serial.print(acc_raw[Z]);
+    Serial.print("\n");
+*/
+    //char Buff[100];
+    //sprintf(Buff, "Gyro: %10d : %10d : %10d | %10d : %10d : %10d\n", gyro_raw[X], gyro_raw[Y], gyro_raw[Z], gyro_angle[X], gyro_angle[Y], gyro_angle[Z]);
 }
 
 /**
@@ -237,6 +249,7 @@ void calculateAngles() {
         // Correct the drift of the gyro with the accelerometer
         gyro_angle[X] = gyro_angle[X] * 0.9996 + acc_angle[X] * 0.0004;
         gyro_angle[Y] = gyro_angle[Y] * 0.9996 + acc_angle[Y] * 0.0004;
+        gyro_angle[Z] = gyro_angle[Z] * 0.9996 + acc_angle[Z] * 0.0004;
     }
     else {
         // At very first start, init gyro angles with accelerometer angles
@@ -254,6 +267,17 @@ void calculateAngles() {
     angular_motions[ROLL] = 0.7 * angular_motions[ROLL] + 0.3 * gyro_raw[X] / SSF_GYRO;
     angular_motions[PITCH] = 0.7 * angular_motions[PITCH] + 0.3 * gyro_raw[Y] / SSF_GYRO;
     angular_motions[YAW] = 0.7 * angular_motions[YAW] + 0.3 * gyro_raw[Z] / SSF_GYRO;
+
+    
+    Serial.print("Angle_X:");
+    Serial.print(acc_angle[X]);
+    Serial.print(",");
+    Serial.print("Angle_Y:");
+    Serial.print(acc_angle[Y]);
+    Serial.print(",");
+    Serial.print("Angle_Z:");
+    Serial.print(acc_angle[Z]);
+    Serial.print("\n");
 }
 
 /**
@@ -268,10 +292,13 @@ void calculateGyroAngles() {
     // Angle calculation using integration
     gyro_angle[X] += (gyro_raw[X] / (FREQ * SSF_GYRO));
     gyro_angle[Y] += (-gyro_raw[Y] / (FREQ * SSF_GYRO)); // Change sign to match the accelerometer's one
+    gyro_angle[Z] += (gyro_raw[Z] / (FREQ * SSF_GYRO));
 
     // Transfer roll to pitch if IMU has yawed
     gyro_angle[Y] += gyro_angle[X] * sin(gyro_raw[Z] * (PI / (FREQ * SSF_GYRO * 180)));
     gyro_angle[X] -= gyro_angle[Y] * sin(gyro_raw[Z] * (PI / (FREQ * SSF_GYRO * 180)));
+    
+    gyro_angle[Z] += gyro_angle[X] * sin(gyro_raw[Y] * (PI / (FREQ * SSF_GYRO * 180)));
 }
 
 /**
@@ -288,6 +315,10 @@ void calculateAccelerometerAngles() {
 
     if (abs(acc_raw[Y]) < acc_total_vector) {
         acc_angle[Y] = asin((float)acc_raw[X] / acc_total_vector) * (180 / PI);
+    }
+
+    if (abs(acc_raw[Z]) < acc_total_vector) {
+        acc_angle[Z] = asin((float)acc_raw[Z] / acc_total_vector) * (180 / PI);
     }
 }
 
@@ -479,6 +510,20 @@ float minMax(float value, float min_value, float max_value) {
  * @return bool
  */
 bool isStarted() {
+    if (status == STARTING)
+    {
+      status = STARTED;
+
+        // Reset PID controller's variables to prevent bump start
+        resetPidController();
+
+        resetGyroAngles();
+    }
+    if (status == STOPPED)
+      status = STARTING;
+
+    return status == STARTED;
+    
     // When left stick is moved in the bottom left corner
     if (status == STOPPED && pulse_length[mode_mapping[YAW]] <= 1012 && pulse_length[mode_mapping[THROTTLE]] <= 1012) {
         status = STARTING;
@@ -543,7 +588,7 @@ void resetPidController() {
  * Calculate PID set points on axis YAW, PITCH, ROLL
  */
 void calculateSetPoints() {
-    pid_set_points[YAW] = calculateYawSetPoint(pulse_length[mode_mapping[YAW]], pulse_length[mode_mapping[THROTTLE]]);
+    pid_set_points[YAW] = 10;//calculateYawSetPoint(pulse_length[mode_mapping[YAW]], pulse_length[mode_mapping[THROTTLE]]);
     pid_set_points[PITCH] = calculateSetPoint(measures[PITCH], pulse_length[mode_mapping[PITCH]]);
     pid_set_points[ROLL] = calculateSetPoint(measures[ROLL], pulse_length[mode_mapping[ROLL]]);
 }
@@ -679,3 +724,92 @@ ISR(PCINT0_vect) {
         pulse_length[CHANNEL4] = current_time - timer[CHANNEL4];   // Calculate pulse duration & save it
     }
 }
+/*
+#include "I2Cdev.h"
+#include "MPU6050.h"
+#include "Wire.h"
+
+MPU6050 accelgyro;
+
+int16_t ax, ay, az, gx, gy, gz;
+
+double timeStep, time, timePrev;
+double arx, ary, arz, grx, gry, grz, gsx, gsy, gsz, rx, ry, rz;
+
+int i;
+double gyroScale = 131;
+
+void setup() {
+
+  Wire.begin();
+  Serial.begin(9600);
+  accelgyro.initialize();
+
+  time = millis();
+
+  i = 1;
+
+}
+
+void loop() {
+
+  // set up time for integration
+  timePrev = time;
+  time = millis();
+  timeStep = (time - timePrev) / 1000; // time-step in s
+
+  // collect readings
+  accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+
+  // apply gyro scale from datasheet
+  gsx = gx/gyroScale;   gsy = gy/gyroScale;   gsz = gz/gyroScale;
+
+  // calculate accelerometer angles
+  arx = (180/3.141592) * atan(ax / sqrt(square(ay) + square(az))); 
+  ary = (180/3.141592) * atan(ay / sqrt(square(ax) + square(az)));
+  arz = (180/3.141592) * atan(sqrt(square(ay) + square(ax)) / az);
+
+  // set initial values equal to accel values
+  if (i == 1) {
+    grx = arx;
+    gry = ary;
+    grz = arz;
+  }
+  // integrate to find the gyro angle
+  else{
+    grx = grx + (timeStep * gsx);
+    gry = gry + (timeStep * gsy);
+    grz = grz + (timeStep * gsz);
+  }  
+
+  // apply filter
+  rx = (0.1 * arx) + (0.9 * grx);
+  ry = (0.1 * ary) + (0.9 * gry);
+  rz = (0.1 * arz) + (0.9 * grz);
+
+  // print result
+  Serial.print(i);   Serial.print("\t");
+  Serial.print(timePrev);   Serial.print("\t");
+  Serial.print(time);   Serial.print("\t");
+  Serial.print(timeStep, 5);   Serial.print("\t\t");
+  Serial.print(ax);   Serial.print("\t");
+  Serial.print(ay);   Serial.print("\t");
+  Serial.print(az);   Serial.print("\t\t");
+  Serial.print(gx);   Serial.print("\t");
+  Serial.print(gy);   Serial.print("\t");
+  Serial.print(gz);   Serial.print("\t\t");
+  Serial.print(arx);   Serial.print("\t");
+  Serial.print(ary);   Serial.print("\t");
+  Serial.print(arz);   Serial.print("\t\t");
+  Serial.print(grx);   Serial.print("\t");
+  Serial.print(gry);   Serial.print("\t");
+  Serial.print(grz);   Serial.print("\t\t");
+  Serial.print(rx);   Serial.print("\t");
+  Serial.print(ry);   Serial.print("\t");
+  Serial.println(rz);
+
+  i = i + 1;
+  delay(50);
+
+}
+*/
