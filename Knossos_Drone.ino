@@ -598,7 +598,7 @@ void calculateSetPoints()
 { 
   while (Serial.available() > 0)
   {
-    Serial.print("Recived_Message\n");
+    //Serial.print("Recived_Message\n");
    //Create a place to hold the incoming message
 
    //Read the next available byte in the serial receive buffer
@@ -609,8 +609,8 @@ void calculateSetPoints()
    {
      //Add the incoming byte to our message
      message[message_pos] = inByte;
-     Serial.println(inByte);
-     Serial.println(message_pos);
+     //Serial.println(inByte);
+     //Serial.println(message_pos);
      if (inByte != '0')
      {
       switch(message_pos)
@@ -640,7 +640,7 @@ void calculateSetPoints()
      message[message_pos] = '\0';
 
      //Print the message (or do other things)
-     Serial.println(message);
+     //Serial.println(message);
 
      //Reset for the next message
      message_pos = 0;
@@ -655,6 +655,11 @@ void calculateSetPoints()
     pid_set_points[YAW] = yaw;//calculateYawSetPoint(yaw, throt);
     pid_set_points[PITCH] = pitch;//calculateSetPoint(measures[PITCH], pitch);
     pid_set_points[ROLL] = roll;//calculateSetPoint(measures[ROLL], roll);
+
+    Serial.println("Vals:");
+    Serial.println(yaw);
+    Serial.println(pitch);
+    Serial.println(roll);
 }
 
 /**
