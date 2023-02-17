@@ -18,19 +18,23 @@ Servo ESC1;
 Servo ESC2;
 Servo ESC3;
 Servo ESC4;
+Servo ESC5;
+Servo ESC6;
 
 int pos = 0; //Sets position variable
 
 void arm(){
-setSpeed(0); //Sets speed variable delay(1000);
+setSpeed(ESC1, 0); //Sets speed variable delay(1000);
+setSpeed(ESC2, 0); //Sets speed variable delay(1000);
+setSpeed(ESC3, 0); //Sets speed variable delay(1000);
+setSpeed(ESC4, 0); //Sets speed variable delay(1000);
+setSpeed(ESC5, 0); //Sets speed variable delay(1000);
+setSpeed(ESC6, 0); //Sets speed variable delay(1000);
 }
 
-void setSpeed(int speed){
+void setSpeed(Servo ESC, int speed){
 int angle = map(speed, 1000, 2000, 30, 180); //Sets servo positions to different speeds
-ESC1.write(angle);
-ESC2.write(angle);
-ESC3.write(angle);
-ESC4.write(angle);
+ESC.write(angle);
 }
 
 void setup() {
@@ -40,12 +44,18 @@ void setup() {
   ESC2.attach(5); //Adds ESC to certain pin.
   ESC3.attach(6); //Adds ESC to certain pin.
   ESC4.attach(7); //Adds ESC to certain pin.
+  ESC5.attach(8); //Adds ESC to certain pin.
+  ESC6.attach(9); //Adds ESC to certain pin.
   arm(); 
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  setSpeed(map(analogRead(A0), 0, 1023, 1000, 2000));
+  setSpeed(ESC1, map(analogRead(A0), 0, 1023, 1000, 2000));
+  setSpeed(ESC2, map(analogRead(A1), 0, 1023, 1000, 2000));
+  setSpeed(ESC3, map(analogRead(A2), 0, 1023, 1000, 2000));
+  setSpeed(ESC4, map(analogRead(A3), 0, 1023, 1000, 2000));
+  
 }
 
 void SetUpTimedProcess()
