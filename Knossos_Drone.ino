@@ -8,10 +8,6 @@
  // ---------------------------------------------------------------------------
 #include <Wire.h>
 // ------------------- Define some constants for convenience -----------------
-#define CHANNEL1 0
-#define CHANNEL2 1
-#define CHANNEL3 2
-#define CHANNEL4 3
 
 #define YAW      0
 #define PITCH    1
@@ -32,15 +28,10 @@
 // Previous state of each channel (HIGH or LOW)
 volatile byte previous_state[4];
 
-// Duration of the pulse on each channel of the receiver in µs (must be within 1000µs & 2000µs)
-volatile unsigned int pulse_length[4] = { 1500, 1500, 1000, 1500 };
-
 // Used to calculate pulse duration on each channel
 volatile unsigned long current_time;
 volatile unsigned long timer[4]; // Timer of each channel
 
-// Used to configure which control (yaw, pitch, roll, throttle) is on which channel
-int mode_mapping[4];
 // ----------------------- MPU variables -------------------------------------
 // The RAW values got from gyro (in °/sec) in that order: X, Y, Z
 int gyro_raw[3] = { 0,0,0 };
@@ -87,7 +78,7 @@ pulse_length_esc3 = 1000,
 pulse_length_esc4 = 1000;
 
 // ------------- Global variables used for PID controller --------------------
-float pid_set_points[3] = { 0, 0, 0 }; // Yaw, Pitch, Roll
+float pid_set_points[4] = { 0, 0, 0, 0 }; // Yaw, Pitch, Roll
 // Errors
 float errors[3];                     // Measured errors (compared to instructions) : [Yaw, Pitch, Roll]
 float delta_err[3] = { 0, 0, 0 }; // Error deltas in that order   : Yaw, Pitch, Roll
@@ -97,6 +88,24 @@ float previous_error[3] = { 0, 0, 0 }; // Last errors (used for derivative compo
 float Kp[3] = { 4.0, 1.3, 1.3 };    // P coefficients in that order : Yaw, Pitch, Roll
 float Ki[3] = { 0.02, 0.04, 0.04 }; // I coefficients in that order : Yaw, Pitch, Roll
 float Kd[3] = { 0, 18, 18 };        // D coefficients in that order : Yaw, Pitch, Roll
+
+int MaxOut = 2000;
+int MinOut = 1000;
+
+/*
+const unsigned int MAX_MESSAGE_LENGTH = 12;
+int throt = 0;
+int yaw = 0;
+int pitch = 0;
+int roll = 0;
+char message[MAX_MESSAGE_LENGTH];
+int message_pos = 0;
+*/
+int Control_YAW_Value = 0;
+int Control_PITCH_Value = 0;
+int Control_ROLL_Value = 0;
+int Control_THROTTLE_Value = 0;
+
 // ---------------------------------------------------------------------------
 /**
  * Status of the quadcopter:
@@ -131,8 +140,6 @@ void setup() {
 
     calibrateMpu6050();
 
-    configureChannelMapping();
-
     // Configure interrupts for receiver
     PCICR |= (1 << PCIE0);  // Set PCIE0 to enable PCMSK0 scan
     PCMSK0 |= (1 << PCINT0); // Set PCINT0 (digital input 8) to trigger an interrupt on state change
@@ -147,6 +154,11 @@ void setup() {
 
     // Turn LED off now setup is done
     digitalWrite(13, LOW);
+
+    pinMode(A0, INPUT);
+    pinMode(A1, INPUT);
+    pinMode(A2, INPUT);
+    pinMode(A3, INPUT);
 }
 
 /**
@@ -169,11 +181,55 @@ void loop() {
         // 5. Calculate motors speed with PID controller
         pidController();
 
-        compensateBatteryDrop();
+        //compensateBatteryDrop();
     }
 
     // 6. Apply motors speed
     applyMotorSpeed();
+
+    PrintOutVals(0);
+}
+
+void PrintOutVals(int Mode)
+{
+    if (Mode == 0 || Mode == 1)
+    {
+      Serial.print("Motor1:");
+      Serial.print(pulse_length_esc1);
+      Serial.print(",");
+      Serial.print("Motor2:");
+      Serial.print(pulse_length_esc2);
+      Serial.print(",");
+      Serial.print("Motor3:");
+      Serial.print(pulse_length_esc3);
+      Serial.print(",");
+      Serial.print("Motor4:");
+    }
+    if (Mode == 0)
+    {
+      Serial.println(pulse_length_esc4);
+    }
+    else if (Mode == 1)
+    {
+      Serial.print(pulse_length_esc4);
+      Serial.print(",");
+    }
+    if (Mode == 1 || Mode == 2)
+    {
+      Serial.print("YAW:");
+      Serial.print(pid_set_points[YAW]);
+      Serial.print(",");
+      Serial.print("PITCH:");
+      Serial.print(pid_set_points[PITCH]);
+      Serial.print(",");
+      Serial.print("ROLL:");
+      Serial.println(pid_set_points[ROLL]);
+      /*
+      Serial.print(",");
+      Serial.print("THROTTLE:");
+      Serial.println(pid_set_points[THROTTLE]);
+      */
+    }
 }
 
 /**
@@ -186,16 +242,15 @@ void loop() {
  */
 void applyMotorSpeed() {
     // Refresh rate is 250Hz: send ESC pulses every 4000µs
-    while ((now = micros()) - loop_timer < period);
-
+    if ((now = micros()) - loop_timer >= 20000)
+    {
     // Update loop timer
     loop_timer = now;
-
-    // Set pins #4 #5 #6 #7 HIGH
     PORTD |= B11110000;
-
+    }
+    else
+    {
     // Wait until all pins #4 #5 #6 #7 are LOW
-    while (PORTD >= 16) {
         now = micros();
         difference = now - loop_timer;
 
@@ -341,7 +396,7 @@ void pidController() {
     float yaw_pid = 0;
     float pitch_pid = 0;
     float roll_pid = 0;
-    int   throttle = pulse_length[mode_mapping[THROTTLE]];
+    int   throttle = pid_set_points[THROTTLE];
 
     // Initialize motor commands with throttle
     pulse_length_esc1 = throttle;
@@ -369,10 +424,10 @@ void pidController() {
     }
 
     // Prevent out-of-range-values
-    pulse_length_esc1 = minMax(pulse_length_esc1, 1100, 2000);
-    pulse_length_esc2 = minMax(pulse_length_esc2, 1100, 2000);
-    pulse_length_esc3 = minMax(pulse_length_esc3, 1100, 2000);
-    pulse_length_esc4 = minMax(pulse_length_esc4, 1100, 2000);
+    pulse_length_esc1 = minMax(pulse_length_esc1, MinOut, MaxOut);
+    pulse_length_esc2 = minMax(pulse_length_esc2, MinOut, MaxOut);
+    pulse_length_esc3 = minMax(pulse_length_esc3, MinOut, MaxOut);
+    pulse_length_esc4 = minMax(pulse_length_esc4, MinOut, MaxOut);
 }
 
 /**
@@ -403,17 +458,6 @@ void calculateErrors() {
     previous_error[YAW] = errors[YAW];
     previous_error[PITCH] = errors[PITCH];
     previous_error[ROLL] = errors[ROLL];
-}
-
-/**
- * Customize mapping of controls: set here which command is on which channel and call
- * this function in setup() routine.
- */
-void configureChannelMapping() {
-    mode_mapping[YAW] = CHANNEL4;
-    mode_mapping[PITCH] = CHANNEL2;
-    mode_mapping[ROLL] = CHANNEL1;
-    mode_mapping[THROTTLE] = CHANNEL3;
 }
 
 /**
@@ -523,7 +567,7 @@ bool isStarted() {
       status = STARTING;
 
     return status == STARTED;
-    
+    /*
     // When left stick is moved in the bottom left corner
     if (status == STOPPED && pulse_length[mode_mapping[YAW]] <= 1012 && pulse_length[mode_mapping[THROTTLE]] <= 1012) {
         status = STARTING;
@@ -547,6 +591,7 @@ bool isStarted() {
     }
 
     return status == STARTED;
+    */
 }
 
 /**
@@ -587,16 +632,9 @@ void resetPidController() {
 /**
  * Calculate PID set points on axis YAW, PITCH, ROLL
  */
-const unsigned int MAX_MESSAGE_LENGTH = 12;
-int throt = 0;
-int yaw = 0;
-int pitch = 0;
-int roll = 0;
-char message[MAX_MESSAGE_LENGTH];
-int message_pos = 0;
 void calculateSetPoints() 
 { 
-  
+  /*
   while (Serial.available() > 0)
   {
     
@@ -649,23 +687,37 @@ void calculateSetPoints()
    }
   }
   message[0] = '\0';
-  
+  */
 /* 
     pid_set_points[YAW] = calculateYawSetPoint(pulse_length[mode_mapping[YAW]], pulse_length[mode_mapping[THROTTLE]]);
     pid_set_points[PITCH] = calculateSetPoint(measures[PITCH], pulse_length[mode_mapping[PITCH]]);
     pid_set_points[ROLL] = calculateSetPoint(measures[ROLL], pulse_length[mode_mapping[ROLL]]);
 */
-    pid_set_points[YAW] = 0;//calculateYawSetPoint(yaw, throt);
-    pid_set_points[PITCH] = 0;//calculateSetPoint(measures[PITCH], pitch);
-    pid_set_points[ROLL] = 0;//calculateSetPoint(measures[ROLL], roll);
+/*
+    pid_set_points[YAW] = yaw;//calculateYawSetPoint(yaw, throt);
+    pid_set_points[PITCH] = pitch;//calculateSetPoint(measures[PITCH], pitch);
+    pid_set_points[ROLL] = roll;//calculateSetPoint(measures[ROLL], roll);
+    */
 
-    Serial.println("Vals:");
-    Serial.println(pulse_length_esc1);
-    Serial.println(pulse_length_esc2);
-    Serial.println(pulse_length_esc3);
-    Serial.println(pulse_length_esc4);
-    Serial.println(pitch);
-    Serial.println(roll);
+    Control_THROTTLE_Value = map(analogRead(A3), 0, 1023, 1000, 2000);
+
+    /*
+    Control_YAW_Value = map(analogRead(A2), 0, 1023, -180, 180);
+    Control_PITCH_Value = map(analogRead(A0), 0, 1023, -180, 180);
+    Control_ROLL_Value = map(analogRead(A1), 0, 1023, -180, 180);
+    */
+    int YV = map(analogRead(A2), 0, 1023, -180, 180);
+    int PV = map(analogRead(A0), 0, 1023, -180, 180);
+    int RV = map(analogRead(A1), 0, 1023, -180, 180);
+
+    Control_YAW_Value = YV;//calculateYawSetPoint(YV, Control_THROTTLE_Value);
+    Control_PITCH_Value = PV;//calculateSetPoint(measures[PITCH], PV);
+    Control_ROLL_Value = RV;//calculateSetPoint(measures[ROLL], RV);
+    
+    pid_set_points[YAW] = Control_YAW_Value;
+    pid_set_points[PITCH] = Control_PITCH_Value;
+    pid_set_points[ROLL] = Control_ROLL_Value;
+    pid_set_points[THROTTLE] = Control_THROTTLE_Value;
 }
 
 /**
@@ -678,14 +730,6 @@ void calculateSetPoints()
 float calculateSetPoint(float angle, int channel_pulse) {
     float level_adjust = angle * 15; // Value 15 limits maximum angle value to ±32.8°
     float set_point = 0;
-
-    // Need a dead band of 16µs for better result
-    if (channel_pulse > 1508) {
-        set_point = channel_pulse - 1508;
-    }
-    else if (channel_pulse < 1492) {
-        set_point = channel_pulse - 1492;
-    }
 
     set_point -= level_adjust;
     set_point /= 3;
@@ -748,9 +792,10 @@ bool isBatteryConnected() {
  * @see https://www.arduino.cc/en/Reference/PortManipulation
  * @see https://www.firediy.fr/article/utiliser-sa-radiocommande-avec-un-arduino-drone-ch-6
  */
+ 
 ISR(PCINT0_vect) {
     current_time = micros();
-
+/*
     // Channel 1 -------------------------------------------------
     if (PINB & B00000001) {                                        // Is input 8 high ?
         if (previous_state[CHANNEL1] == LOW) {                     // Input 8 changed from 0 to 1 (rising edge)
@@ -798,93 +843,5 @@ ISR(PCINT0_vect) {
         previous_state[CHANNEL4] = LOW;                            // Save current state
         pulse_length[CHANNEL4] = current_time - timer[CHANNEL4];   // Calculate pulse duration & save it
     }
-}
-/*
-#include "I2Cdev.h"
-#include "MPU6050.h"
-#include "Wire.h"
-
-MPU6050 accelgyro;
-
-int16_t ax, ay, az, gx, gy, gz;
-
-double timeStep, time, timePrev;
-double arx, ary, arz, grx, gry, grz, gsx, gsy, gsz, rx, ry, rz;
-
-int i;
-double gyroScale = 131;
-
-void setup() {
-
-  Wire.begin();
-  Serial.begin(9600);
-  accelgyro.initialize();
-
-  time = millis();
-
-  i = 1;
-
-}
-
-void loop() {
-
-  // set up time for integration
-  timePrev = time;
-  time = millis();
-  timeStep = (time - timePrev) / 1000; // time-step in s
-
-  // collect readings
-  accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-
-  // apply gyro scale from datasheet
-  gsx = gx/gyroScale;   gsy = gy/gyroScale;   gsz = gz/gyroScale;
-
-  // calculate accelerometer angles
-  arx = (180/3.141592) * atan(ax / sqrt(square(ay) + square(az))); 
-  ary = (180/3.141592) * atan(ay / sqrt(square(ax) + square(az)));
-  arz = (180/3.141592) * atan(sqrt(square(ay) + square(ax)) / az);
-
-  // set initial values equal to accel values
-  if (i == 1) {
-    grx = arx;
-    gry = ary;
-    grz = arz;
-  }
-  // integrate to find the gyro angle
-  else{
-    grx = grx + (timeStep * gsx);
-    gry = gry + (timeStep * gsy);
-    grz = grz + (timeStep * gsz);
-  }  
-
-  // apply filter
-  rx = (0.1 * arx) + (0.9 * grx);
-  ry = (0.1 * ary) + (0.9 * gry);
-  rz = (0.1 * arz) + (0.9 * grz);
-
-  // print result
-  Serial.print(i);   Serial.print("\t");
-  Serial.print(timePrev);   Serial.print("\t");
-  Serial.print(time);   Serial.print("\t");
-  Serial.print(timeStep, 5);   Serial.print("\t\t");
-  Serial.print(ax);   Serial.print("\t");
-  Serial.print(ay);   Serial.print("\t");
-  Serial.print(az);   Serial.print("\t\t");
-  Serial.print(gx);   Serial.print("\t");
-  Serial.print(gy);   Serial.print("\t");
-  Serial.print(gz);   Serial.print("\t\t");
-  Serial.print(arx);   Serial.print("\t");
-  Serial.print(ary);   Serial.print("\t");
-  Serial.print(arz);   Serial.print("\t\t");
-  Serial.print(grx);   Serial.print("\t");
-  Serial.print(gry);   Serial.print("\t");
-  Serial.print(grz);   Serial.print("\t\t");
-  Serial.print(rx);   Serial.print("\t");
-  Serial.print(ry);   Serial.print("\t");
-  Serial.println(rz);
-
-  i = i + 1;
-  delay(50);
-
-}
 */
+}
