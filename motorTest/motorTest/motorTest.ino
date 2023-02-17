@@ -55,6 +55,9 @@ void loop() {
   setSpeed(ESC2, map(analogRead(A1), 0, 1023, 1000, 2000));
   setSpeed(ESC3, map(analogRead(A2), 0, 1023, 1000, 2000));
   setSpeed(ESC4, map(analogRead(A3), 0, 1023, 1000, 2000));
+
+  setSpeed(ESC5, map(analogRead(A3), 0, 1023, 1000, 2000));
+  setSpeed(ESC6, map(analogRead(A3), 0, 1023, 1000, 2000));
   
 }
 
