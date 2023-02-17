@@ -33,7 +33,7 @@ setSpeed(ESC6, 0); //Sets speed variable delay(1000);
 }
 
 void setSpeed(Servo ESC, int speed){
-int angle = map(speed, 1000, 2000, 30, 180); //Sets servo positions to different speeds
+int angle = map(speed, 1000, 2000, 30, 170); //Sets servo positions to different speeds
 ESC.write(angle);
 }
 
