@@ -7,6 +7,7 @@
 
  // ---------------------------------------------------------------------------
 #include <Wire.h>
+#include <Servo.h>
 // ------------------- Define some constants for convenience -----------------
 
 #define YAW      0
@@ -120,6 +121,11 @@ int status = STOPPED;
 int battery_voltage;
 // ---------------------------------------------------------------------------
 
+Servo ESC1;
+Servo ESC2;
+Servo ESC3;
+Servo ESC4;
+
 /**
  * Setup configuration
  */
@@ -134,8 +140,13 @@ void setup() {
     digitalWrite(13, HIGH);
 
     // Set pins #4 #5 #6 #7 as outputs
-    DDRD |= B11110000;
+    //DDRD |= B11110000;
 
+    ESC1.attach(4); //Adds ESC to certain pin.
+    ESC2.attach(5); //Adds ESC to certain pin.
+    ESC3.attach(6); //Adds ESC to certain pin.
+    ESC4.attach(7); //Adds ESC to certain pin.
+  
     setupMpu6050Registers();
 
     calibrateMpu6050();
@@ -241,6 +252,7 @@ void PrintOutVals(int Mode)
  * @see https:// www.arduino.cc/en/Reference/PortManipulation
  */
 void applyMotorSpeed() {
+  /*
     // Refresh rate is 250Hz: send ESC pulses every 4000µs
     if ((now = micros()) - loop_timer >= 20000)
     {
@@ -259,6 +271,11 @@ void applyMotorSpeed() {
         if (difference >= pulse_length_esc3) PORTD &= B10111111; // Set pin #6 LOW
         if (difference >= pulse_length_esc4) PORTD &= B01111111; // Set pin #7 LOW
     }
+  */
+  ESC1.write(map(pulse_length_esc1, 1000, 2000, 10, 170));
+  ESC2.write(map(pulse_length_esc2, 1000, 2000, 10, 170));
+  ESC3.write(map(pulse_length_esc3, 1000, 2000, 10, 170));
+  ESC4.write(map(pulse_length_esc4, 1000, 2000, 10, 170));
 }
 
 /**

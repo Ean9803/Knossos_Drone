@@ -1,4 +1,6 @@
 
+#include <Servo.h>
+
 #define FREQ        250   // Sampling frequency
 
 unsigned int  period; // Sampling period
@@ -12,9 +14,42 @@ pulse_length_esc4 = 1000;
 
 int sensorValue = 0;
 
+Servo ESC1;
+Servo ESC2;
+Servo ESC3;
+Servo ESC4;
+
+int pos = 0; //Sets position variable
+
+void arm(){
+setSpeed(0); //Sets speed variable delay(1000);
+}
+
+void setSpeed(int speed){
+int angle = map(speed, 1000, 2000, 30, 180); //Sets servo positions to different speeds
+ESC1.write(angle);
+ESC2.write(angle);
+ESC3.write(angle);
+ESC4.write(angle);
+}
+
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
+  ESC1.attach(4); //Adds ESC to certain pin.
+  ESC2.attach(5); //Adds ESC to certain pin.
+  ESC3.attach(6); //Adds ESC to certain pin.
+  ESC4.attach(7); //Adds ESC to certain pin.
+  arm(); 
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  setSpeed(map(analogRead(A0), 0, 1023, 1000, 2000));
+}
+
+void SetUpTimedProcess()
+{
   DDRD |= B11110000;
   // Configure interrupts for receiver
   PCICR |= (1 << PCIE0);  // Set PCIE0 to enable PCMSK0 scan
@@ -28,8 +63,8 @@ void setup() {
   loop_timer = micros();
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
+void RunTimedProcess()
+{
   applyMotorSpeed();
   pulse_length_esc1 = 
   pulse_length_esc2 = 
