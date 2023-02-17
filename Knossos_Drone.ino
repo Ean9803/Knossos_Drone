@@ -596,8 +596,10 @@ char message[MAX_MESSAGE_LENGTH];
 int message_pos = 0;
 void calculateSetPoints() 
 { 
+  
   while (Serial.available() > 0)
   {
+    
     //Serial.print("Recived_Message\n");
    //Create a place to hold the incoming message
 
@@ -647,17 +649,21 @@ void calculateSetPoints()
    }
   }
   message[0] = '\0';
+  
 /* 
     pid_set_points[YAW] = calculateYawSetPoint(pulse_length[mode_mapping[YAW]], pulse_length[mode_mapping[THROTTLE]]);
     pid_set_points[PITCH] = calculateSetPoint(measures[PITCH], pulse_length[mode_mapping[PITCH]]);
     pid_set_points[ROLL] = calculateSetPoint(measures[ROLL], pulse_length[mode_mapping[ROLL]]);
 */
-    pid_set_points[YAW] = yaw;//calculateYawSetPoint(yaw, throt);
-    pid_set_points[PITCH] = pitch;//calculateSetPoint(measures[PITCH], pitch);
-    pid_set_points[ROLL] = roll;//calculateSetPoint(measures[ROLL], roll);
+    pid_set_points[YAW] = 0;//calculateYawSetPoint(yaw, throt);
+    pid_set_points[PITCH] = 0;//calculateSetPoint(measures[PITCH], pitch);
+    pid_set_points[ROLL] = 0;//calculateSetPoint(measures[ROLL], roll);
 
     Serial.println("Vals:");
-    Serial.println(yaw);
+    Serial.println(pulse_length_esc1);
+    Serial.println(pulse_length_esc2);
+    Serial.println(pulse_length_esc3);
+    Serial.println(pulse_length_esc4);
     Serial.println(pitch);
     Serial.println(roll);
 }
