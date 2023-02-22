@@ -100,7 +100,7 @@ void setup() {
 
   battery_voltage = (analogRead(0) + 65) * 1.2317;
   delay(50);
-  start = 0;
+  start = 2;
   loop_timer = micros();
 
   Serial.print("Ready");
@@ -121,6 +121,7 @@ void loop() {
 
   calculate_angle();
 
+/*
   if (start == 0 && receiver_input_channel_3 < 1100 && receiver_input_channel_4 < 1100){
     start = 1;
   }
@@ -135,11 +136,17 @@ void loop() {
     Serial.println("Stopeed");
     delay(40);
   }
-
+*/
   //channel 1 --> yaw
   //channel 2 --> throttle
   //channel 3 --> pitch
   //channel 4 --> roll
+
+  reciver_input_channel_1 = map(analogRead(A0), 0, 1023, 1000, 2000);
+  reciver_input_channel_2 = map(analogRead(A1), 0, 1023, 1000, 2000);
+  reciver_input_channel_3 = map(analogRead(A2), 0, 1023, 1000, 2000);
+  reciver_input_channel_4 = map(analogRead(A3), 0, 1023, 1000, 2000);
+
 
   pid_roll_setpoint = 0;
   if (receiver_input_channel_4 > 1510) pid_roll_setpoint = receiver_input_channel_4 - 1510;
@@ -282,6 +289,7 @@ void calculate_angle() {
 //This routine is called every time input 8, 9, 10 or 11 changed state.
 //Measure the time, using micros(), between each port changes from 0 to 1 and 1 to 0.
 //Basically, the raising and falling edges of the ESC.
+/*
 ISR(PCINT0_vect) {
   //Channel 1=========================================
   if (last_channel_1 == 0 && PINB & B00000001 ) {
@@ -320,6 +328,7 @@ ISR(PCINT0_vect) {
     receiver_input_channel_4 = micros() - timer_4;
   }
 }
+*/
 
 void read_mpu_6050_data() {
   //Subroutine for reading the raw gyro and accelerometer data
