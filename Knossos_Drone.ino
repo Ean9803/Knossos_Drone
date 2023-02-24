@@ -1,15 +1,6 @@
-/*
-   This program is written by Neil Nie. Different parts of the software is reference from J. Brokking,
-   and some code is taken directly from his repository. I deeply appreciate him for written a detailed
-   tutorial on building quadcopter. This program can be adapted to many different hardware configerations.
-
-   MIT License (c) Yongyang Nie 2017
-   I, Yongyang Nie hereby grant you the full rights to freely copy, edit and distribute the program.
-   However, I am not responsible for any damages and inguiries caused by this program. Quadcopters are
-   dangerous. Use this software responsively.
-*/
 
 #include <Wire.h>
+#include <Servo.h>
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //PID gain and limit settings
@@ -54,22 +45,56 @@ float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, p
 float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
 int start;
 
+Servo ESC1;
+Servo ESC2;
+Servo ESC3;
+Servo ESC4;
+Servo ESC5;
+Servo ESC6;
+
+void arm()
+{
+  setSpeed(ESC1, 0);
+  setSpeed(ESC2, 0);
+  setSpeed(ESC3, 0);
+  setSpeed(ESC4, 0);
+  setSpeed(ESC5, 0);
+  setSpeed(ESC6, 0);
+}
+
+void setSpeed(Servo ESC, int speed)
+{
+  int angle = map(speed, 1000, 2000, 30, 180); //Sets servo positions to different speeds
+  ESC.write(angle);
+}
+
 void setup() {
   
-  TWBR = 12;
+  //TWBR = 12;
 
   // set PCIE0 to enable PCMSK0 scan
+  /*
   PCICR |= (1 << PCIE0);
   PCMSK0 |= (1 << PCINT0);
   PCMSK0 |= (1 << PCINT1);
   PCMSK0 |= (1 << PCINT2);
   PCMSK0 |= (1 << PCINT3);
+*/
 
   Serial.begin(9600);
   Serial.print("Program Begin");
-
+/*
   DDRD |= B11111100;                                                        //Configure digital poort 4, 5, 6 and 7 as output.
   DDRB |= B00110000;                                                        //Configure digital poort 12 and 13 as output.
+*/
+
+  ESC1.attach(4); //Adds ESC to certain pin.
+  ESC2.attach(5); //Adds ESC to certain pin.
+  ESC3.attach(6); //Adds ESC to certain pin.
+  ESC4.attach(7); //Adds ESC to certain pin.
+  ESC5.attach(12); //Adds ESC to certain pin.
+  ESC6.attach(13); //Adds ESC to certain pin.
+  arm();
 
   Wire.begin();                                                        //Start I2C as master
 
@@ -88,9 +113,9 @@ void setup() {
     gyro_x_cal += gyro_x;
     gyro_y_cal += gyro_y;
     gyro_z_cal += gyro_z;
-    PORTD |= B11111100;                                                     //Set digital poort 4, 5, 6 and 7 high.
+    //PORTD |= B11111100;                                                     //Set digital poort 4, 5, 6 and 7 high.
     delayMicroseconds(1000);
-    PORTD &= B00111111;                                                     //Set digital poort 4, 5, 6 and 7 low.
+    //PORTD &= B00111111;                                                     //Set digital poort 4, 5, 6 and 7 low.
     delay(3);   //Delay 3us to simulate the 25
   }
 
@@ -115,9 +140,9 @@ void loop() {
   gyro_z -= gyro_z_cal;
 
   //65.5 = 1 deg/sec (check the datasheet of the MPU-6050 for more information).
-  gyro_roll_input = (gyro_roll_input * 0.8) + ((gyro_x / 57.14286) * 0.2);            //Gyro pid input is deg/sec.
-  gyro_pitch_input = (gyro_pitch_input * 0.8) + ((gyro_y / 57.14286) * 0.2);         //Gyro pid input is deg/sec.
-  gyro_yaw_input = (gyro_yaw_input * 0.8) + ((gyro_z / 57.14286) * 0.2);               //Gyro pid input is deg/sec.
+  gyro_roll_input = 0;//(gyro_roll_input * 0.8) + ((gyro_x / 57.14286) * 0.2);            //Gyro pid input is deg/sec.
+  gyro_pitch_input = 0;//(gyro_pitch_input * 0.8) + ((gyro_y / 57.14286) * 0.2);         //Gyro pid input is deg/sec.
+  gyro_yaw_input = 0;//(gyro_yaw_input * 0.8) + ((gyro_z / 57.14286) * 0.2);               //Gyro pid input is deg/sec.
 
   calculate_angle();
 
@@ -141,12 +166,12 @@ void loop() {
   //channel 2 --> throttle
   //channel 3 --> pitch
   //channel 4 --> roll
-
-  reciver_input_channel_1 = map(analogRead(A0), 0, 1023, 1000, 2000);
-  reciver_input_channel_2 = map(analogRead(A1), 0, 1023, 1000, 2000);
-  reciver_input_channel_3 = map(analogRead(A2), 0, 1023, 1000, 2000);
-  reciver_input_channel_4 = map(analogRead(A3), 0, 1023, 1000, 2000);
-
+/*
+  receiver_input_channel_1 = map(analogRead(A0), 0, 1023, 1000, 2000);
+  receiver_input_channel_2 = map(analogRead(A1), 0, 1023, 1000, 2000);
+  receiver_input_channel_3 = map(analogRead(A2), 0, 1023, 1000, 2000);
+  receiver_input_channel_4 = map(analogRead(A3), 0, 1023, 1000, 2000);
+*/
 
   pid_roll_setpoint = 0;
   if (receiver_input_channel_4 > 1510) pid_roll_setpoint = receiver_input_channel_4 - 1510;
@@ -169,7 +194,11 @@ void loop() {
   }
 
   //---------------------------------------------------------------------------------------
-  calculate_pid();
+  //calculate_pid();
+  pid_output_yaw = map(analogRead(A0), 0, 1023, -180, 180);
+  receiver_input_channel_2 = map(analogRead(A1), 0, 1023, 1000, 2000);
+  pid_output_pitch = map(analogRead(A2), 0, 1023, -180, 180);
+  pid_output_roll = map(analogRead(A3), 0, 1023, -180, 180);
   //---------------------------------------------------------------------------------------
 
   //The battery voltage is needed for compensation.
@@ -198,7 +227,7 @@ void loop() {
     esc_6 = throttle - pid_output_pitch - pid_output_roll + pid_output_yaw; //?
 
     //voltage drop calculation
-    if (battery_voltage < 1240 && battery_voltage > 800) {
+    if (battery_voltage < 1240 && battery_voltage > 800 && false) {
       esc_1 += esc_1 * ((1240 - battery_voltage) / (float)3500);
       esc_2 += esc_2 * ((1240 - battery_voltage) / (float)3500);
       esc_3 += esc_3 * ((1240 - battery_voltage) / (float)3500);
@@ -214,12 +243,12 @@ void loop() {
     if (esc_5 < 1100) esc_5 = 1000;                                         //Keep the motors running.
     if (esc_6 < 1100) esc_6 = 1000; 
 
-    if (esc_1 > 1700) esc_1 = 1700;                                          //Limit the esc-1 pulse to 2000us.
-    if (esc_2 > 1700) esc_2 = 1700;                                          //Limit the esc-2 pulse to 2000us.
-    if (esc_3 > 1700) esc_3 = 1700;                                          //Limit the esc-3 pulse to 2000us.
-    if (esc_4 > 1700) esc_4 = 1700;
-    if (esc_5 > 1700) esc_5 = 1700;
-    if (esc_6 > 1700) esc_6 = 1700;
+    if (esc_1 > 2000) esc_1 = 2000;                                          //Limit the esc-1 pulse to 2000us.
+    if (esc_2 > 2000) esc_2 = 2000;                                          //Limit the esc-2 pulse to 2000us.
+    if (esc_3 > 2000) esc_3 = 2000;                                          //Limit the esc-3 pulse to 2000us.
+    if (esc_4 > 2000) esc_4 = 2000;
+    if (esc_5 > 2000) esc_5 = 2000;
+    if (esc_6 > 2000) esc_6 = 2000;
 
     //---------------------------------------------------------------------------------------
     //write_LCD();
@@ -234,10 +263,40 @@ void loop() {
     digitalWrite(12, HIGH);
   }
 
+  Serial.print("ESC_1:");
+  Serial.print(esc_1);
+  Serial.print(",");
+  Serial.print("ESC_2:");
+  Serial.print(esc_2);
+  Serial.print(",");
+  Serial.print("ESC_3:");
+  Serial.print(esc_3);
+  Serial.print(",");
+  Serial.print("ESC_4:");
+  Serial.print(esc_4);
+  Serial.print(",");
+  Serial.print("ESC_5:");
+  Serial.print(esc_5);
+  Serial.print(",");
+  Serial.print("ESC_6:");
+  Serial.print(esc_6);
+  Serial.print(",");
+  Serial.print("BAT:");
+  Serial.println(battery_voltage);
+  
+  setSpeed(ESC1, esc_1);
+  setSpeed(ESC2, esc_2);
+  setSpeed(ESC3, esc_3);
+  setSpeed(ESC4, esc_4);
+  setSpeed(ESC5, esc_5);
+  setSpeed(ESC6, esc_6);
+
+/*
   while (micros() - loop_timer < 4000);                                     //We wait until 4000us are passed.
   loop_timer = micros();
-
+*/
   //Set digital outputs 2, 3, 4,5,6 and 7 high.
+/*  
   PORTD |= B11111100;
   timer_channel_1 = esc_1 + loop_timer;
   timer_channel_2 = esc_2 + loop_timer;
@@ -245,8 +304,9 @@ void loop() {
   timer_channel_4 = esc_4 + loop_timer;
   timer_channel_5 = esc_5 + loop_timer;
   timer_channel_6 = esc_6 + loop_timer;
-
+*/
   //Stay in this loop until output 4,5,6 and 7 are low.
+/*
   while (PORTD >= 16) {
     esc_loop_timer = micros();
     if (timer_channel_6 <= esc_loop_timer)PORTD &= B11111011;
@@ -256,6 +316,7 @@ void loop() {
     if (timer_channel_3 <= esc_loop_timer)PORTD &= B10111111;
     if (timer_channel_4 <= esc_loop_timer)PORTD &= B01111111;
   }
+*/
 }
 
 void calculate_angle() {
