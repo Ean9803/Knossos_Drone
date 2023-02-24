@@ -92,8 +92,8 @@ void setup() {
   ESC2.attach(5); //Adds ESC to certain pin.
   ESC3.attach(6); //Adds ESC to certain pin.
   ESC4.attach(7); //Adds ESC to certain pin.
-  ESC5.attach(12); //Adds ESC to certain pin.
-  ESC6.attach(13); //Adds ESC to certain pin.
+  ESC5.attach(8); //Adds ESC to certain pin.
+  ESC6.attach(9); //Adds ESC to certain pin.
   arm();
 
   Wire.begin();                                                        //Start I2C as master
