@@ -1,6 +1,9 @@
 
 #include <Wire.h>
 #include <Servo.h>
+#include <SoftwareSerial.h>
+
+SoftwareSerial HM10(2, 3); // RX = 2, TX = 3
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //PID gain and limit settings
@@ -52,6 +55,8 @@ Servo ESC4;
 Servo ESC5;
 Servo ESC6;
 
+float InputX, InputY, InputZ, InputW;
+
 void arm()
 {
   setSpeed(ESC1, 0);
@@ -69,24 +74,13 @@ void setSpeed(Servo ESC, int speed)
 }
 
 void setup() {
-  
-  //TWBR = 12;
-
-  // set PCIE0 to enable PCMSK0 scan
-  /*
-  PCICR |= (1 << PCIE0);
-  PCMSK0 |= (1 << PCINT0);
-  PCMSK0 |= (1 << PCINT1);
-  PCMSK0 |= (1 << PCINT2);
-  PCMSK0 |= (1 << PCINT3);
-*/
 
   Serial.begin(9600);
   Serial.print("Program Begin");
-/*
-  DDRD |= B11111100;                                                        //Configure digital poort 4, 5, 6 and 7 as output.
-  DDRB |= B00110000;                                                        //Configure digital poort 12 and 13 as output.
-*/
+
+  Serial.println("HM10 serial started at 9600");
+
+  HM10.begin(9600); // set HM10 serial at 9600 baud rate
 
   ESC1.attach(4); //Adds ESC to certain pin.
   ESC2.attach(5); //Adds ESC to certain pin.
@@ -113,9 +107,7 @@ void setup() {
     gyro_x_cal += gyro_x;
     gyro_y_cal += gyro_y;
     gyro_z_cal += gyro_z;
-    //PORTD |= B11111100;                                                     //Set digital poort 4, 5, 6 and 7 high.
     delayMicroseconds(1000);
-    //PORTD &= B00111111;                                                     //Set digital poort 4, 5, 6 and 7 low.
     delay(3);   //Delay 3us to simulate the 25
   }
 
@@ -129,6 +121,8 @@ void setup() {
   loop_timer = micros();
 
   Serial.print("Ready");
+
+  InputX = InputY = InputZ = InputW = 0;
 }
 
 void loop() {
@@ -317,6 +311,10 @@ void loop() {
     if (timer_channel_4 <= esc_loop_timer)PORTD &= B01111111;
   }
 */
+}
+
+void BluetoothInput()
+{
 }
 
 void calculate_angle() {
