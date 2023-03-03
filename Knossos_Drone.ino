@@ -1,9 +1,6 @@
 
 #include <Wire.h>
 #include <Servo.h>
-#include <SoftwareSerial.h>
-
-SoftwareSerial HM10(2, 3); // RX = 2, TX = 3
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //PID gain and limit settings
@@ -46,7 +43,7 @@ int esc_1, esc_2, esc_3, esc_4, esc_5, esc_6;
 float pid_i_mem_roll, pid_roll_setpoint, gyro_roll_input, pid_output_roll, pid_last_roll_d_error;
 float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, pid_last_pitch_d_error;
 float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
-int start;
+int start, lastStart;
 
 Servo ESC1;
 Servo ESC2;
@@ -56,6 +53,14 @@ Servo ESC5;
 Servo ESC6;
 
 float InputX, InputY, InputZ, InputW;
+int update_interval=100; // time interval in ms for updating panel indicators 
+unsigned long last_time=0; // time of last update
+char data_in; // data received from serial link
+String terminal_str=""; // String for Terminal Send Boxes
+int progress; // Progress Bar Value
+
+String Outputs[5];
+String CmdString = "";
 
 void arm()
 {
@@ -73,14 +78,60 @@ void setSpeed(Servo ESC, int speed)
   ESC.write(angle);
 }
 
-void setup() {
+void setOutput(int Index, String Value)
+{
+  if (Index < 0 && Index >= 5)
+  {
+    Index = 0;
+  }
+  Outputs[Index] = Value;
+}
+
+
+int lines = 0;
+void printStr(String Value)
+{
+  if (lines++ > 12)
+  {
+    CmdString = CmdString.substring(CmdString.indexOf('\n') + 1);
+    lines--;
+  }
+  CmdString.concat(Value);
+  CmdString.concat("\n");
+
+  Serial.print("*&"+CmdString+"*");
+}
+
+void setup()
+{
 
   Serial.begin(9600);
-  Serial.print("Program Begin");
 
-  Serial.println("HM10 serial started at 9600");
-
-  HM10.begin(9600); // set HM10 serial at 9600 baud rate
+  Serial.println("*.kwl");
+  Serial.println("clear_panel()");
+  Serial.println("set_grid_size(30,14)");
+  Serial.println("add_text_box(13,7,8,L,,245,240,245,4)");
+  Serial.println("add_text_box(9,7,3,L,[4]:,245,240,245,)");
+  Serial.println("add_text_box(13,5,8,L,,245,240,245,2)");
+  Serial.println("add_text_box(13,6,8,L,,245,240,245,3)");
+  Serial.println("add_text_box(13,4,8,L,,245,240,245,1)");
+  Serial.println("add_text_box(13,3,8,L,,245,240,245,0)");
+  Serial.println("add_text_box(9,3,3,L,[0]:,245,240,245,)");
+  Serial.println("add_text_box(9,4,3,L,[1]:,245,240,245,)");
+  Serial.println("add_text_box(9,6,3,L,[3]:,245,240,245,)");
+  Serial.println("add_text_box(9,5,3,L,[2]:,245,240,245,)");
+  Serial.println("add_switch(14,0,4,S,K,0,0)");
+  Serial.println("add_touch_pad(2,5,6,-100,100,0,100,A,a)");
+  Serial.println("add_touch_pad(22,5,6,-100,100,0,100,B,b)");
+  Serial.println("add_gauge(2,11,4,0,200,100,Y,,,10,5)");
+  Serial.println("add_gauge(22,11,4,0,200,100,R,,,10,5)");
+  Serial.println("add_gauge(1,5,3,0,200,0,T,,,10,5)");
+  Serial.println("add_gauge(28,5,3,0,200,100,P,,,10,5)");
+  Serial.println("add_gauge(12,2,5,0,100,100,?,,,10,5)");
+  Serial.println("add_send_box(9,9,5,,@,;)");
+  Serial.println("add_monitor(15,8,6,&,3)");
+  Serial.println("set_panel_notes(DroneRemote,,,)");
+  Serial.println("run()");
 
   ESC1.attach(4); //Adds ESC to certain pin.
   ESC2.attach(5); //Adds ESC to certain pin.
@@ -94,15 +145,11 @@ void setup() {
 
   setup_mpu_6050_registers();                                          //Setup the registers of the MPU-6050 (500dfs / +/-8g) and start the gyro
 
-  pinMode(12, OUTPUT);
-  pinMode(2, OUTPUT);
-
+  printStr("Booting Up");
   for (int cal_int = 0; cal_int < 2000 ; cal_int ++) {
     if (cal_int % 125 == 0) {
-      Serial.print(".");
-      digitalWrite(12, HIGH);
+      printStr("-");
     }
-    digitalWrite(12, LOW);
     read_mpu_6050_data();
     gyro_x_cal += gyro_x;
     gyro_y_cal += gyro_y;
@@ -115,17 +162,33 @@ void setup() {
   gyro_y_cal /= 2000;
   gyro_z_cal /= 2000;
 
-  battery_voltage = (analogRead(0) + 65) * 1.2317;
   delay(50);
-  start = 2;
+  start = 0;
   loop_timer = micros();
 
-  Serial.print("Ready");
+  printStr("Ready");
 
   InputX = InputY = InputZ = InputW = 0;
+  lastStart = -1;
 }
 
-void loop() {
+long readVcc()
+{
+  long result;
+  // Read 1.1V reference against AVcc
+  ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+  delay(2); // Wait for Vref to settle
+  ADCSRA |= _BV(ADSC); // Convert
+  while (bit_is_set(ADCSRA,ADSC));
+  result = ADCL;
+  result |= ADCH<<8;
+  result = 1125300L / result; // Back-calculate AVcc in mV
+  return result;
+}
+
+void loop()
+{
+  BluetoothInput();
 
   read_mpu_6050_data();
 
@@ -189,25 +252,34 @@ void loop() {
 
   //---------------------------------------------------------------------------------------
   //calculate_pid();
-  pid_output_yaw = map(analogRead(A0), 0, 1023, -180, 180);
-  receiver_input_channel_2 = map(analogRead(A1), 0, 1023, 1000, 2000);
-  pid_output_pitch = map(analogRead(A2), 0, 1023, -180, 180);
-  pid_output_roll = map(analogRead(A3), 0, 1023, -180, 180);
+  pid_output_yaw = map(InputW, -100, 100, -180, 180);
+  receiver_input_channel_2 = map(InputZ, 100, -100, 1000, 2000);
+  pid_output_pitch = map(InputY, 100, -100, -180, 180);
+  pid_output_roll = map(InputX, -100, 100, -180, 180);
   //---------------------------------------------------------------------------------------
 
   //The battery voltage is needed for compensation.
   //A complementary filter is used to reduce noise.
   //0.09853 = 0.08 * 1.2317.
-  battery_voltage = battery_voltage * 0.92 + (analogRead(0) + 65) * 0.09853;
-
-  //Turn on the led if battery voltage is to low.
-  if (battery_voltage < 1030 && battery_voltage > 600){
-    digitalWrite(12, HIGH);
-  }else{
-    digitalWrite(12, LOW);
-  }
+  battery_voltage = (int)readVcc();
 
   throttle = receiver_input_channel_2;
+
+  if (start != lastStart)
+  {
+    if (start == 0)
+      printStr("KILLED");
+    else if (start == 2)
+      printStr("STARTED");
+    lastStart = start;
+  }
+
+  if (start == 1)
+  {
+    printStr("STAND_BY -> " + String(-InputZ) + " <= -90");
+    if (-InputZ <= -90)
+      start = 2;
+  }
 
   if (start == 2) {
 
@@ -243,9 +315,6 @@ void loop() {
     if (esc_4 > 2000) esc_4 = 2000;
     if (esc_5 > 2000) esc_5 = 2000;
     if (esc_6 > 2000) esc_6 = 2000;
-
-    //---------------------------------------------------------------------------------------
-    //write_LCD();
   }
   else {
     esc_1 = 1000;
@@ -254,9 +323,8 @@ void loop() {
     esc_4 = 1000;
     esc_5 = 1000;
     esc_6 = 1000;
-    digitalWrite(12, HIGH);
   }
-
+/*
   Serial.print("ESC_1:");
   Serial.print(esc_1);
   Serial.print(",");
@@ -277,44 +345,133 @@ void loop() {
   Serial.print(",");
   Serial.print("BAT:");
   Serial.println(battery_voltage);
-  
+  */
   setSpeed(ESC1, esc_1);
   setSpeed(ESC2, esc_2);
   setSpeed(ESC3, esc_3);
   setSpeed(ESC4, esc_4);
   setSpeed(ESC5, esc_5);
   setSpeed(ESC6, esc_6);
-
 /*
-  while (micros() - loop_timer < 4000);                                     //We wait until 4000us are passed.
-  loop_timer = micros();
-*/
-  //Set digital outputs 2, 3, 4,5,6 and 7 high.
-/*  
-  PORTD |= B11111100;
-  timer_channel_1 = esc_1 + loop_timer;
-  timer_channel_2 = esc_2 + loop_timer;
-  timer_channel_3 = esc_3 + loop_timer;
-  timer_channel_4 = esc_4 + loop_timer;
-  timer_channel_5 = esc_5 + loop_timer;
-  timer_channel_6 = esc_6 + loop_timer;
-*/
-  //Stay in this loop until output 4,5,6 and 7 are low.
-/*
-  while (PORTD >= 16) {
-    esc_loop_timer = micros();
-    if (timer_channel_6 <= esc_loop_timer)PORTD &= B11111011;
-    if (timer_channel_5 <= esc_loop_timer)PORTD &= B11110111;
-    if (timer_channel_1 <= esc_loop_timer)PORTD &= B11101111;
-    if (timer_channel_2 <= esc_loop_timer)PORTD &= B11011111;
-    if (timer_channel_3 <= esc_loop_timer)PORTD &= B10111111;
-    if (timer_channel_4 <= esc_loop_timer)PORTD &= B01111111;
-  }
+  printStr("Throttle: " + String(InputZ, 3));
+  printStr("Yaw: " + String(InputW, 3));
+  printStr("Pitch: " + String(InputY, 3));
+  printStr("Roll: " + String(InputX, 3));
 */
 }
 
 void BluetoothInput()
 {
+   if (Serial.available())
+   {
+    data_in=Serial.read(); //Get next character 
+
+    if(data_in=='S')
+    { //Switch On
+      resetPID();
+      start = 1;
+    }
+    if(data_in=='K')
+    { // Switch Off 
+      start = 0;
+    }
+    if(data_in=='F')
+    { // Force ON 
+      start = 2;
+    }
+
+    //Touch pad
+    if(data_in=='B')
+    { // Pad Start Text
+      while(true)
+      {
+        if (Serial.available())
+        {
+          data_in=Serial.read(); //Get next character 
+          if(data_in=='X') InputX=Serial.parseInt();
+          if(data_in=='Y') InputY=Serial.parseInt();
+          if(data_in=='b') break; // End character
+        }
+      }
+    }
+
+    //Touch pad
+    if(data_in=='A')
+    { // Pad Start Text
+      while(true)
+      {
+        if (Serial.available())
+        {
+          data_in=Serial.read(); //Get next character 
+          if(data_in=='X') InputW=Serial.parseInt();
+          if(data_in=='Y') InputZ=Serial.parseInt();
+          if(data_in=='a') break; // End character
+        }
+      }
+    }
+
+    // Receive Data from Terminal Send Box
+    if(data_in=='@')
+    { // Start Text
+     terminal_str="";
+     while (data_in!=';')
+     { // Loop until end text character reached
+       if (Serial.available())
+       {
+         data_in=Serial.read();
+         terminal_str+=data_in;
+       }
+     }
+     printStr(">" + terminal_str);
+     CMDRecived(terminal_str);
+    }
+
+  }
+
+  ///////////// Send Data to Android device
+
+  unsigned long t=millis();
+  if ((t-last_time)>update_interval)
+  {
+    last_time=t;
+
+    // Update Text Element 
+    Serial.print("*0"+Outputs[0]+"*");
+
+    // Update Text Element 
+    Serial.print("*1"+Outputs[1]+"*");
+
+    // Update Text Element 
+    Serial.print("*3"+Outputs[3]+"*");
+
+    // Update Text Element 
+    Serial.print("*4"+Outputs[4]+"*");
+
+    // Update Text Element 
+    Serial.print("*2"+Outputs[2]+"*");
+
+
+    // Green Progress Bar (Range is from 0 to 100)
+    progress=map(battery_voltage, 0, 1023, 0, 100); // <--- Set Progress bar value here 
+    Serial.print("*?"+String(progress)+"*");
+
+    // Orange Progress Bar (Range is from 0 to 200)
+    Serial.print("*Y"+String(map(InputW, -100, 100, 0, 200))+"*");
+
+    // Orange Progress Bar (Range is from 0 to 200)
+    Serial.print("*R"+String(map(InputX, -100, 100, 0, 200))+"*");
+
+    // Bubble Gauge (Range is from 0 to 200)
+    Serial.print("*T"+String(map(InputZ, -100, 100, 200, 0))+"*");
+
+    // Bubble Gauge (Range is from 0 to 200)
+    Serial.print("*P"+String(map(InputY, -100, 100, 200, 0))+"*");
+  }
+}
+
+void CMDRecived(String CMD)
+{
+
 }
 
 void calculate_angle() {
@@ -345,50 +502,6 @@ void calculate_angle() {
   roll_level_adjust = angle_roll * 10;
 }
 
-//This routine is called every time input 8, 9, 10 or 11 changed state.
-//Measure the time, using micros(), between each port changes from 0 to 1 and 1 to 0.
-//Basically, the raising and falling edges of the ESC.
-/*
-ISR(PCINT0_vect) {
-  //Channel 1=========================================
-  if (last_channel_1 == 0 && PINB & B00000001 ) {
-    last_channel_1 = 1;
-    timer_1 = micros();
-  }
-  else if (last_channel_1 == 1 && !(PINB & B00000001)) {
-    last_channel_1 = 0;
-    receiver_input_channel_1 = micros() - timer_1;
-  }
-  //Channel 2=========================================
-  if (last_channel_2 == 0 && PINB & B00000010 ) {
-    last_channel_2 = 1;
-    timer_2 = micros();
-  }
-  else if (last_channel_2 == 1 && !(PINB & B00000010)) {
-    last_channel_2 = 0;
-    receiver_input_channel_2 = micros() - timer_2;
-  }
-  //Channel 3=========================================
-  if (last_channel_3 == 0 && PINB & B00000100 ) {
-    last_channel_3 = 1;
-    timer_3 = micros();
-  }
-  else if (last_channel_3 == 1 && !(PINB & B00000100)) {
-    last_channel_3 = 0;
-    receiver_input_channel_3 = micros() - timer_3;
-  }
-  //Channel 4=========================================
-  if (last_channel_4 == 0 && PINB & B00001000 ) {
-    last_channel_4 = 1;
-    timer_4 = micros();
-  }
-  else if (last_channel_4 == 1 && !(PINB & B00001000)) {
-    last_channel_4 = 0;
-    receiver_input_channel_4 = micros() - timer_4;
-  }
-}
-*/
-
 void read_mpu_6050_data() {
   //Subroutine for reading the raw gyro and accelerometer data
   Wire.beginTransmission(0x68);                                        //Start communicating with the MPU-6050
@@ -407,40 +520,6 @@ void read_mpu_6050_data() {
   gyro_y = gyro_y * -1;
   gyro_z = gyro_z * -1;
 }
-
-//void write_LCD() {                                                     //Subroutine for writing the LCD
-//  //To get a 250Hz program loop (4us) it's only possible to write one character per loop
-//  //Writing multiple characters is taking to much time
-//  if (lcd_loop_counter == 14)lcd_loop_counter = 0;                     //Reset the counter after 14 characters
-//  lcd_loop_counter ++;                                                 //Increase the counter
-//  if (lcd_loop_counter == 1) {
-//    angle_pitch_buffer = angle_pitch * 10;                      //Buffer the pitch angle because it will change
-//    lcd.setCursor(6, 0);                                               //Set the LCD cursor to position to position 0,0
-//  }
-//  if (lcd_loop_counter == 2) {
-//    if (pid_output_pitch < 0)lcd.print("-");                         //Print - if value is negative
-//    else lcd.print("+");                                               //Print + if value is negative
-//  }
-//  if (lcd_loop_counter == 3)lcd.print(abs(angle_pitch_buffer) / 1000); //Print first number
-//  if (lcd_loop_counter == 4)lcd.print((abs(angle_pitch_buffer) / 100) % 10); //Print second number
-//  if (lcd_loop_counter == 5)lcd.print((abs(angle_pitch_buffer) / 10) % 10); //Print third number
-//  if (lcd_loop_counter == 6)lcd.print(".");                            //Print decimal point
-//  if (lcd_loop_counter == 7)lcd.print(abs(angle_pitch_buffer) % 10);   //Print decimal number
-//
-//  if (lcd_loop_counter == 8) {
-//    angle_roll_buffer = angle_roll * 10;
-//    lcd.setCursor(6, 1);
-//  }
-//  if (lcd_loop_counter == 9) {
-//    if (pid_output_roll < 0)lcd.print("-");                          //Print - if value is negative
-//    else lcd.print("+");                                               //Print + if value is negative
-//  }
-//  if (lcd_loop_counter == 10)lcd.print(abs(angle_roll_buffer) / 1000);
-//  if (lcd_loop_counter == 11)lcd.print((abs(angle_roll_buffer) / 100) % 10);
-//  if (lcd_loop_counter == 12)lcd.print((abs(angle_roll_buffer) / 10) % 10);
-//  if (lcd_loop_counter == 13)lcd.print(".");
-//  if (lcd_loop_counter == 14)lcd.print(abs(angle_roll_buffer) % 10);
-//}
 
 void setup_mpu_6050_registers() {
   Wire.beginTransmission(0x68);
